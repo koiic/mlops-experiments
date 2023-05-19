@@ -10,4 +10,4 @@ environments:
   production:
     <<: *default
     instance_type: ml.t2.medium
-    model_data_path: s3://sagemaker-pytorch-text-classification/
+    model_data_path: s3://maio-sagemaker_new/models
