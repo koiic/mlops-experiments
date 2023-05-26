@@ -1,5 +1,7 @@
 import sys
 
+from deploy_env import DeployEnv
+
 sys.path.append(".")
 import argparse
 import json
@@ -11,7 +13,6 @@ from datetime import datetime, timedelta, timezone
 import boto3
 import pandas as pd
 import sagemaker
-from deploy_env import DeployEnv
 from maio_python import Client
 from sagemaker.pytorch import PyTorchModel
 

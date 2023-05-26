@@ -1,4 +1,5 @@
 import sys
+import zipfile
 
 sys.path.append(".")
 import argparse
@@ -49,6 +50,15 @@ def build_model_data_file():
 
 def update_endpoint_if_exists(env: DeployEnv):
     return env.isProduction() & env.isDeployed()
+
+
+def delete_endpoint(env: DeployEnv, endpoint: str):
+    """
+    Need to manually delete the endpoint and config because of
+    https://github.com/aws/sagemaker-python-sdk/issues/101#issuecomment-607376320.
+    """
+    env.client().delete_endpoint(EndpointName=endpoint)
+    env.client().delete_endpoint_config(EndpointConfigName=endpoint)
 
 
 def delete_endpoint_and_config(env: DeployEnv):
@@ -104,12 +114,12 @@ def deploy(env: DeployEnv, source_dir: str):
 
 
 def train(
-    env,
-    training_input_path: str,
-    test_input_path: str,
-    hyperparameters: dict,
-    source_dir: str,
-    output_path: str,
+        env,
+        training_input_path: str,
+        test_input_path: str,
+        hyperparameters: dict,
+        source_dir: str,
+        output_path: str,
 ):
     #
     estimator = PyTorch(
@@ -129,15 +139,46 @@ def train(
     estimator.fit({"training": training_input_path, "test": test_input_path})
 
 
+def deploy_lambda(env: DeployEnv, zip_file_name: str):
+    lambda_client = boto3.client('lambda')
+    # Create a new Lambda function and update it with the latest code
+    # Create a ZIP file of the function code
+    zip_file_name = 'function_code.zip'
+    source_dir = 'maio_ml/deploy/sagemaker/lambda_func.py'
+    with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+        zipf.write(source_dir)  # Add your source code file(s) to the ZIP
+
+    with open(zip_file_name, 'rb') as f:
+        zipped_code = f.read()
+
+    response = lambda_client.create_function(
+        FunctionName='inference_lambda',
+        Runtime='python3.8',
+        Role=env.setting("aws_role"),
+        Handler='lambda_func.lambda_handler',
+        Code={
+            'ZipFile': zipped_code
+        },
+    )
+
+    print(response, " RESPONSE")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # hyperparameters sent by the client are passed as command-line arguments to the script.
+    # parser.add_argument("--train", action="store_true", help="Use to train the model.")
     parser.add_argument("--train", action="store_true", help="Use to train the model.")
+    parser.add_argument("--delete", action="store_true", help="Use to delete the endpoint.")
+    parser.add_argument("--function", action="store_true", help="Use to deploy the lambda function.")
+    parser.add_argument("--endpoint", type=str, help="endpoint name.")
 
     env = DeployEnv()
 
     args = parser.parse_args()
+
+    print(args)
 
     source_dir = "maio_ml/deploy/sagemaker"
 
@@ -159,5 +200,9 @@ if __name__ == "__main__":
             source_dir,
             output_path,
         )
+    elif args.delete:
+        delete_endpoint(env, args.endpoint)
+    elif args.function:
+        deploy_lambda(env, "lambda_func.zip")
     else:
         deploy(env, source_dir)
