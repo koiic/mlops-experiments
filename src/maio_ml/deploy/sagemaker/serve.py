@@ -1,16 +1,21 @@
-import torch
-import os
-import logging
-import sys
 import json
-#from maio_ml.anomaly_classification import predict
-#from sagemaker_inference import decoder, content_types, encoder
+import logging
+import os
+import sys
+
+from deploy.sagemaker import predict
+from sagemaker_inference import encoder
+
+# from maio_ml.anomaly_classification import predict
+# from sagemaker_inference import decoder, content_types, encoder
 
 logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 log = logging.getLogger("model")
 
+
 def model_fn(model_dir):
     log.info("In model_fn(). DEPLOY_ENV=", os.environ.get("DEPLOY_ENV"))
+
 
 # From docs:
 # Default json deserialization requires request_body contain a single json list.
