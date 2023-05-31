@@ -158,7 +158,7 @@ def create_layer():
         print(response['LayerVersionArn'], response)
 
 
-def deploy_lambda(env: DeployEnv):
+def create_lambda_function(env: DeployEnv, source_dir):
     lambda_client = boto3.client('lambda')
     # Create a new Lambda function and update it with the latest code
     # Create a ZIP file of the function code
@@ -166,7 +166,6 @@ def deploy_lambda(env: DeployEnv):
     import zipfile
 
     zip_file_name = 'lambda_func.zip'
-    source_dir = 'maio_ml/deploy/aws_utils'
 
     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
         zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
@@ -229,6 +228,6 @@ if __name__ == "__main__":
         delete_endpoint(env, args.endpoint)
     elif args.function:
         # create_layer()
-        deploy_lambda(env)
+        create_lambda_function(env, source_dir)
     else:
         deploy(env, source_dir)

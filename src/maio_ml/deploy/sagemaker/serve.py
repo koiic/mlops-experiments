@@ -3,7 +3,7 @@ import logging
 import os
 import sys
 
-from deploy.sagemaker import predict
+# from deploy.sagemaker import predict
 from sagemaker_inference import encoder
 
 # from maio_ml.anomaly_classification import predict
