@@ -209,7 +209,6 @@ if __name__ == "__main__":
     if args.train:
         # deploy()
         hyperparameters = {"learning-rate": 0.001, "epochs": 10}
-        role = "arn:aws:iam::146915812621:role/service-role/SageMaker-DataScientist"
         # source_dir="chequers-rookley/code/src"
         # output_path="file://chequers-rookley/models/"
         output_path = "file://build/"

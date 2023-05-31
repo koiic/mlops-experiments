@@ -2,6 +2,9 @@ import argparse
 
 import boto3
 import json
+from deploy_env import DeployEnv
+
+env = DeployEnv()
 
 payload = {
     "gateway_name": "Aruba",
@@ -29,7 +32,7 @@ def create_cloudwatch_event_rule(interval: int, payload: dict):
     target = {
         'Id': '1',
         'Arn': 'arn:aws:lambda:eu-west-1:146915812621:function:test_func_v2',
-        'RoleArn': 'arn:aws:iam::146915812621:role/service-role/SageMaker-DataScientist',
+        'RoleArn': env.setting("aws_role"),
         'Input': json.dumps(payload)  # Set the desired payload for each invocation
     }
 
