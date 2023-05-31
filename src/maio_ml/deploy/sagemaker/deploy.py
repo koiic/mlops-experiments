@@ -3,14 +3,11 @@ import zipfile
 
 sys.path.append(".")
 import argparse
-import logging
 import logging.config
 import os
 import re
-import tarfile
 
 import boto3
-import sagemaker
 from deploy_env import DeployEnv
 from sagemaker.pytorch import PyTorchModel
 from sagemaker.pytorch.estimator import PyTorch
@@ -139,26 +136,54 @@ def train(
     estimator.fit({"training": training_input_path, "test": test_input_path})
 
 
-def deploy_lambda(env: DeployEnv, zip_file_name: str):
+def create_layer():
+    """
+    create a aws_utils layer with the required libraries
+
+    """
+
+    # Create a Lambda client
+    lambda_client = boto3.client('aws_utils')
+
+    # Upload the layer ZIP file to AWS Lambda
+    with open('maio_ml/deploy/aws_utils/layer.zip', 'rb') as f:
+        response = lambda_client.publish_layer_version(
+            LayerName='maio-layer',
+            Content={
+                'ZipFile': f.read()
+            },
+            CompatibleRuntimes=['python3.8'],  # Replace with your desired runtime(s)
+            Description='Maio layer for aws_utils functions'
+        )
+        print(response['LayerVersionArn'], response)
+
+
+def deploy_lambda(env: DeployEnv):
     lambda_client = boto3.client('lambda')
     # Create a new Lambda function and update it with the latest code
     # Create a ZIP file of the function code
-    zip_file_name = 'function_code.zip'
-    source_dir = 'maio_ml/deploy/sagemaker/lambda_func.py'
+    import os
+    import zipfile
+
+    zip_file_name = 'lambda_func.zip'
+    source_dir = 'maio_ml/deploy/aws_utils'
+
     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
-        zipf.write(source_dir)  # Add your source code file(s) to the ZIP
+        zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
 
     with open(zip_file_name, 'rb') as f:
         zipped_code = f.read()
 
     response = lambda_client.create_function(
-        FunctionName='inference_lambda',
+        FunctionName='test_func_v2',
         Runtime='python3.8',
         Role=env.setting("aws_role"),
         Handler='lambda_func.lambda_handler',
         Code={
             'ZipFile': zipped_code
+
         },
+
     )
 
     print(response, " RESPONSE")
@@ -171,7 +196,7 @@ if __name__ == "__main__":
     # parser.add_argument("--train", action="store_true", help="Use to train the model.")
     parser.add_argument("--train", action="store_true", help="Use to train the model.")
     parser.add_argument("--delete", action="store_true", help="Use to delete the endpoint.")
-    parser.add_argument("--function", action="store_true", help="Use to deploy the lambda function.")
+    parser.add_argument("--function", action="store_true", help="Use to create the lambda function.")
     parser.add_argument("--endpoint", type=str, help="endpoint name.")
 
     env = DeployEnv()
@@ -203,6 +228,7 @@ if __name__ == "__main__":
     elif args.delete:
         delete_endpoint(env, args.endpoint)
     elif args.function:
-        deploy_lambda(env, "lambda_func.zip")
+        # create_layer()
+        deploy_lambda(env)
     else:
         deploy(env, source_dir)
