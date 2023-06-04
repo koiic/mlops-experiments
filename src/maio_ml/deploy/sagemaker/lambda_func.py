@@ -6,22 +6,10 @@ import pandas as pd
 from maio_python import Client
 
 
-def fetch_data_from_maio(event):
-    # Retrieve the payload from the API Gateway request
-
-    BASE_URL = "https://engine.heineken.maio.io"
-
-    gateway_name = event['gateway_name']
-    token = event['token']
-    start_time = event['start_time']
-    end_time = event['end_time']
-    base_url = event['base_url']
-
-    # using heineken as the base case
-    if base_url is None:
-        base_url = BASE_URL
+def fetch_data_from_maio(base_url, token, gateway_name, start_time, end_time):
+    # Creating MAIO client
     maio_client = Client(base_url, token=token)
-
+    # Get gateway Id
     gateway_id = maio_client.get_gateway_id_from_name(gateway_name)
 
     assert gateway_id is not None
@@ -35,8 +23,9 @@ def fetch_data_from_maio(event):
     return df_maio
 
 
-def clean_up_data(event):
-    df_maio = fetch_data_from_maio(event)
+def clean_up_data(base_url, token, gateway_name, start_time, end_time):
+    # Get data from MAIO
+    df_maio = fetch_data_from_maio(base_url, token, gateway_name, start_time, end_time)
 
     mapping_columns = {"CoolerTemp": "cooler_temp", "BathTemp": "bath_temp", "CoolerSwitch": "cooler_switch",
                        "RefridgentTemp": "refridgent_temp", "CompressorCurrent": "compressor_current",
@@ -46,8 +35,6 @@ def clean_up_data(event):
 
     df_maio_small['timestamp'] = pd.to_datetime(df_maio_small['timestamp'])
     df_maio_small = df_maio_small.set_index('timestamp')
-
-    # print(f"{df_maio_small.shape[0]} over 257")
 
     # Resample the dataframe to 1 minute
     df_maio_small_resampled = df_maio_small.resample("1Min").mean()
@@ -67,17 +54,41 @@ def clean_up_data(event):
 
 def lambda_handler(event, context):
     # Retrieve the payload from the API Gateway request
-    # Retrieve the payload from the API Gateway request
-    df_maio_small_resampled = clean_up_data(event)
-    base_endpoint = 'pytorch-anomaly-classification-2023-05-21-06-50-14-925'
+    base_url = "https://engine.heineken.maio.io"
+    gateway_name = 'Aruba'
+    start_time = '2023-05-08T10:00:00.000000Z'
+    end_time = '2023-05-08T11:00:00.000000Z'
+    token = 'lqaYNKBQD7gUfSR3dwOB3Llrk8Ujoa'
+    endpoint = 'pytorch-anomaly-classification-2023-05-21-06-50-14-925'
 
-    if event.get('endpoint') is None:
-        event['endpoint'] = base_endpoint
+    if 'queryStringParameters' in event:
+        event = event['queryStringParameters']
+
+    if 'base_url' in event:
+        base_url = event['base_url']
+
+    if 'gateway_name' in event:
+        gateway_name = event['gateway_name']
+
+    if 'start_time' in event:
+        start_time = event['start_time']
+
+    if 'end_time' in event:
+        end_time = event['end_time']
+
+    if 'token' in event:
+        token = event['token']
+
+    if 'endpoint' in event:
+        endpoint = event['endpoint']
+
+    df_maio_small_resampled = clean_up_data(base_url, token, gateway_name, start_time, end_time)
+    # base_endpoint = 'pytorch-anomaly-classification-2023-05-21-06-50-14-925'
 
     # Invoke the SM endpoint
     runtime_client = boto3.client('sagemaker-runtime')
     response = runtime_client.invoke_endpoint(
-        EndpointName=event['endpoint'],
+        EndpointName=endpoint,
         ContentType="application/json",
         Accept="application/json",
         Body=df_maio_small_resampled.to_json(orient='split', index=False)
@@ -89,10 +100,8 @@ def lambda_handler(event, context):
     anom_score = pd.read_json(json.loads(data), orient='split')
 
     result = dict(
-        time=event['end_time'],
         anomaly_detected=str(anom_score.ge(4.5).any()['anom_score']),
         count=int(anom_score.ge(4.5).sum()['anom_score'])
-
     )
 
     return result

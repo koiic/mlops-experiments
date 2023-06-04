@@ -49,6 +49,15 @@ def update_endpoint_if_exists(env: DeployEnv):
     return env.isProduction() & env.isDeployed()
 
 
+def update_endpoint(env: DeployEnv):
+    # update sage maker endpoint
+    logger.info("Updating endpoint...")
+    env.client().update_endpoint(
+        EndpointName=env.setting("model_name"),
+        EndpointConfigName=env.setting("model_name"),
+    )
+
+
 def delete_endpoint(env: DeployEnv, endpoint: str):
     """
     Need to manually delete the endpoint and config because of
@@ -136,18 +145,15 @@ def train(
     estimator.fit({"training": training_input_path, "test": test_input_path})
 
 
-def create_layer():
+def create_layer(env: DeployEnv):
     """
     create a aws_utils layer with the required libraries
 
     """
 
-    # Create a Lambda client
-    lambda_client = boto3.client('aws_utils')
-
     # Upload the layer ZIP file to AWS Lambda
     with open('maio_ml/deploy/aws_utils/layer.zip', 'rb') as f:
-        response = lambda_client.publish_layer_version(
+        response = env.lambda_client().publish_layer_version(
             LayerName='maio-layer',
             Content={
                 'ZipFile': f.read()
@@ -158,14 +164,9 @@ def create_layer():
         print(response['LayerVersionArn'], response)
 
 
-def create_lambda_function(env: DeployEnv, source_dir):
-    lambda_client = boto3.client('lambda')
+def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
     # Create a new Lambda function and update it with the latest code
     # Create a ZIP file of the function code
-    import os
-    import zipfile
-
-    zip_file_name = 'lambda_func.zip'
 
     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
         zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
@@ -173,7 +174,7 @@ def create_lambda_function(env: DeployEnv, source_dir):
     with open(zip_file_name, 'rb') as f:
         zipped_code = f.read()
 
-    response = lambda_client.create_function(
+    response = env.lambda_client().create_function(
         FunctionName='test_func_v2',
         Runtime='python3.8',
         Role=env.setting("aws_role"),
@@ -182,6 +183,24 @@ def create_lambda_function(env: DeployEnv, source_dir):
             'ZipFile': zipped_code
 
         },
+
+    )
+
+    print(response, " RESPONSE")
+
+
+def update_lambda_function(env: DeployEnv, source_dir, zip_file_name):
+
+    with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+        zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
+
+    with open(zip_file_name, 'rb') as f:
+        zipped_code = f.read()
+
+    response = env.lambda_client().update_function_code(
+        FunctionName='test_func_v2',
+        ZipFile=zipped_code,
+        Publish=True
 
     )
 
@@ -205,6 +224,8 @@ if __name__ == "__main__":
     print(args)
 
     source_dir = "maio_ml/deploy/sagemaker"
+    zip_file_name = 'lambda_func.zip'
+
 
     if args.train:
         # deploy()
@@ -226,7 +247,7 @@ if __name__ == "__main__":
     elif args.delete:
         delete_endpoint(env, args.endpoint)
     elif args.function:
-        # create_layer()
-        create_lambda_function(env, source_dir)
+        # create_layer(env)
+        update_lambda_function(env, source_dir, zip_file_name)
     else:
         deploy(env, source_dir)
