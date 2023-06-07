@@ -164,33 +164,32 @@ def create_layer(env: DeployEnv):
         print(response['LayerVersionArn'], response)
 
 
-def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
-    # Create a new Lambda function and update it with the latest code
-    # Create a ZIP file of the function code
-
-    with zipfile.ZipFile(zip_file_name, 'w') as zipf:
-        zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
-
-    with open(zip_file_name, 'rb') as f:
-        zipped_code = f.read()
-
-    response = env.lambda_client().create_function(
-        FunctionName='test_func_v2',
-        Runtime='python3.8',
-        Role=env.setting("aws_role"),
-        Handler='lambda_func.lambda_handler',
-        Code={
-            'ZipFile': zipped_code
-
-        },
-
-    )
-
-    print(response, " RESPONSE")
-
+# def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
+#     # Create a new Lambda function and update it with the latest code
+#     # Create a ZIP file of the function code
+#
+#     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+#         zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
+#
+#     with open(zip_file_name, 'rb') as f:
+#         zipped_code = f.read()
+#
+#     response = env.lambda_client().create_function(
+#         FunctionName='test_func_v2',
+#         Runtime='python3.8',
+#         Role=env.setting("aws_role"),
+#         Handler='lambda_func.lambda_handler',
+#         Code={
+#             'ZipFile': zipped_code
+#
+#         },
+#
+#     )
+#
+#     print(response, " RESPONSE")
+#
 
 def update_lambda_function(env: DeployEnv, source_dir, zip_file_name):
-
     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
         zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
 
@@ -201,6 +200,37 @@ def update_lambda_function(env: DeployEnv, source_dir, zip_file_name):
         FunctionName='test_func_v2',
         ZipFile=zipped_code,
         Publish=True
+
+    )
+
+    print(response, " RESPONSE")
+
+
+def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
+    # Create a new Lambda function and update it with the latest code
+    # Create a ZIP file of the function code
+
+    with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+        # get all files from the source_dir
+        for root, dirs, files in os.walk(source_dir):
+            print(root, dirs, files)
+            for file in files:
+                zipf.write(os.path.join(root, file), arcname=os.path.basename(file))
+
+        # zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
+
+    with open(zip_file_name, 'rb') as f:
+        zipped_code = f.read()
+
+    response = env.lambda_client().create_function(
+        FunctionName='graphql-server',
+        Runtime='python3.8',
+        Role=env.setting("aws_role"),
+        Handler='lambda_func.handler',
+        Code={
+            'ZipFile': zipped_code
+
+        },
 
     )
 
@@ -226,7 +256,6 @@ if __name__ == "__main__":
     source_dir = "maio_ml/deploy/sagemaker"
     zip_file_name = 'lambda_func.zip'
 
-
     if args.train:
         # deploy()
         hyperparameters = {"learning-rate": 0.001, "epochs": 10}
@@ -247,7 +276,8 @@ if __name__ == "__main__":
     elif args.delete:
         delete_endpoint(env, args.endpoint)
     elif args.function:
-        # create_layer(env)
-        update_lambda_function(env, source_dir, zip_file_name)
+        create_layer(env)
+        # update_lambda_function(env, source_dir, zip_file_name)
+        # create_lambda_function(env, "maio_ml/deploy/graphql_server", "graphql_server.zip")
     else:
         deploy(env, source_dir)

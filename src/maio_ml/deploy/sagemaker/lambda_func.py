@@ -61,6 +61,18 @@ def lambda_handler(event, context):
     token = 'lqaYNKBQD7gUfSR3dwOB3Llrk8Ujoa'
     endpoint = 'pytorch-anomaly-classification-2023-05-21-06-50-14-925'
 
+    """ check if token is passed in the header, throw forbidden error if not"""
+    if 'headers' in event:
+        if 'oauth_token' in event['headers']:
+            token = event['headers']['oauth_token']
+        else:
+            message = 'access token is missing'
+            return {
+                'statusCode': 403,
+                'body': json.dumps('Forbidden Error: {}'.format(message)),
+            }
+
+
     if 'queryStringParameters' in event:
         event = event['queryStringParameters']
 
@@ -76,8 +88,8 @@ def lambda_handler(event, context):
     if 'end_time' in event:
         end_time = event['end_time']
 
-    if 'token' in event:
-        token = event['token']
+    # if 'token' in event:
+    #     token = event['token']
 
     if 'endpoint' in event:
         endpoint = event['endpoint']

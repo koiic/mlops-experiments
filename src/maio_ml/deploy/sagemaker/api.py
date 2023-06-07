@@ -5,8 +5,8 @@ import boto3
 
 from src.maio_ml.deploy.sagemaker.utils import load_json
 
-logging.config.dictConfig(load_json("logging.json"))
-logger = logging.getLogger("logger")
+# logging.config.dictConfig(load_json("logging.json"))
+# logger = logging.getLogger("logger")
 
 # create an api gateway client
 apigw_client = boto3.client('apigateway')
@@ -97,9 +97,24 @@ def create_function_url(function_name: str):
     return response
 
 
+def add_permission_to_function():
+    lambda_client = boto3.client('lambda')
+
+    # Attach the policy to the Lambda function
+    lambda_client.add_permission(
+        FunctionName='graphql-server',
+        StatementId='FunctionURLAllowPublicAccess',
+        Action='lambda:InvokeFunctionUrl',
+        Principal='*',
+        FunctionUrlAuthType='NONE'
+        # Replace the SourceArn with your API Gateway ARN
+    )
+
+
+
 if __name__ == '__main__':
-    # add_permission_to_function()
-    print(create_function_url('test_func_v2'))
+    add_permission_to_function()
+    # print(create_function_url('graphql-server'))
     # print(create_api())
     # print(update_api('o4mw4cqmrd', 'predict'))
     # print(get_resource_id('o4mw4cqmrd', 'predict'))

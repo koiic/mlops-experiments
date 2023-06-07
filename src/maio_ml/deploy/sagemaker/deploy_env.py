@@ -46,7 +46,7 @@ class DeployEnv(object):
 
         return self._runtime_client
 
-    def client(self):
+    def lambda_client(self):
         if self._lambda_client:
             return self._lambda_client
         else:
@@ -54,7 +54,7 @@ class DeployEnv(object):
 
         return self._lambda_client
 
-    def lambda_client(self):
+    def client(self):
         if self._client:
             return self._client
 
