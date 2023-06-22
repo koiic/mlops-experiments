@@ -229,9 +229,7 @@ def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
         Handler='lambda_func.handler',
         Code={
             'ZipFile': zipped_code
-
         },
-
     )
 
     print(response, " RESPONSE")
@@ -276,8 +274,8 @@ if __name__ == "__main__":
     elif args.delete:
         delete_endpoint(env, args.endpoint)
     elif args.function:
-        create_layer(env)
+        # create_layer(env)
         # update_lambda_function(env, source_dir, zip_file_name)
-        # create_lambda_function(env, "maio_ml/deploy/graphql_server", "graphql_server.zip")
+        create_lambda_function(env, "maio_ml/deploy/graphql_server", "graphql_server.zip")
     else:
         deploy(env, source_dir)

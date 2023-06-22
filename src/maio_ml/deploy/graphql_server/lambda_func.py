@@ -9,12 +9,8 @@ logger = logging.getLogger()
 
 app = GraphQL(schema, debug=True)
 
-
 # Create the Ariadne app
 handler = Mangum(app)
-
-
-
 
 
 def response(body: dict, status_code: int = 200):
