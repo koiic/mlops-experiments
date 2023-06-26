@@ -22,14 +22,15 @@ def get_model(model_id):
                     signature for signature in model_signatures if signature["model_id"] == int(model_id))})
             model.update(
                 {'versions': [model_version for model_version in model_versions if
-                              model_version["model_id"] == model_id]}
+                              model_version["ml_model_id"] == model_id]}
             )
             return model
     return None
 
 
 def get_model_version(model_version_id):
-    return next((model_version for model_version in model_versions if model_version["id"] == int(model_version_id)), None)
+    return next((model_version for model_version in model_versions if model_version["id"] == int(model_version_id)),
+                None)
 
 
 def get_model_version_count(model_id):
@@ -66,7 +67,7 @@ def resolve_mlmodel(_, info, id):
 
 @query.field("mlmodelversions")
 def resolve_mlmodelversions(_, info, model_id):
-    return [model_version for model_version in model_versions if model_version["model_id"] == model_id]
+    return [model_version for model_version in model_versions if model_version["ml_model_id"] == model_id]
 
 
 @query.field("mlmodelversion")
@@ -83,6 +84,33 @@ def resolve_mlmodelscheduler(_, info, id):
 @query.field("mlmodelschedulers")
 def resolve_mlmodelschedulers(_, info, model_version_id):
     return [scheduler for scheduler in schedulers if scheduler["model_version_id"] == model_version_id]
+
+
+@query.field("modeltypes")
+def resolve_modeltypes(_, info):
+    parameter = dict(learning_rate=1.0, batch_size=32, epochs=100)
+    return [
+        {
+            "id": 1,
+            "name": "Tensorflow",
+            "modelParameters": parameter,
+        },
+        {
+            "id": 2,
+            "name": "Pytorch",
+            "modelParameters": parameter,
+        },
+    ]
+
+
+@query.field("modeltype")
+def resolve_modeltype(_, info, id):
+    parameters = dict(learning_rate=1.0, batch_size=32, epochs=100)
+    return {
+        "id": 1,
+        "name": "Tensorflow",
+        "parameters": parameters,
+    }
 
 
 @query.field("mlmodelschedulertaskhistory")
@@ -118,6 +146,7 @@ def resolve_create_ml_model(_, info, input):
 
     signature["id"] = model_id
     signature["model_id"] = model_id
+    signature['datasource'] = {'id': 1, 'connector': 'GATEWAY', 'name': 'Gateway'}
     model_signatures.append(signature)
     models_.append(data)
     data['signature'] = signature
@@ -127,25 +156,27 @@ def resolve_create_ml_model(_, info, input):
 @mutations.field("createMLModelVersion")
 def resolve_create_ml_model_version(_, info, input):
     # check if the model exists
-    model = next((model for model in models_ if model["id"] == int(input["model_id"])), None)
+    model = get_model(int(input["ml_model_id"]))
+    # model = next((model for model in models_ if model["id"] == int(input["model_id"])), None)
     if model is None:
         raise HttpBadRequestError("Model not found")
     now = datetime.now()
     dt_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    parameters = input.pop("parameters")
     data = dict(**input)
     data["id"] = model_versions[-1]["id"] + 1 if model_versions else 1
-    data["version"] = get_model_version_count(input["model_id"]) + 1
+    data["version"] = get_model_version_count(input["ml_model_id"]) + 1
     data["status"] = "PENDING"
     data["archived"] = False
     data["created_at"] = dt_str
     data["updated_at"] = dt_str
+    if input["model_type_id"] and input['datasource_mapping']['datasource_id']:
+        data['status'] = 'TRAINING'
 
-    parameters["id"] = data["id"]
-    data['parameters'] = parameters
     model_versions.append(data)
-    model = get_model(input["model_id"])
+    model = get_model(input["ml_model_id"])
     data['ml_model'] = model
+
+    # if the modeltype ID is provides  then launch training
 
     return data
 
@@ -197,8 +228,6 @@ def resolve_update_ml_model(_, info, id, input):
     model.update({
         "name": input["name"],
         "description": input["description"],
-        "use_case": input["use_case"],
-        "usage_guidelines": input["usage_guidelines"],
         "updated_at": dt_str,
     })
     return model
@@ -230,26 +259,6 @@ def resolve_delete_ml_model(_, info, id):
     models_.remove(model)
 
     return True
-
-
-@mutations.field("trainMLModelVersion")
-def resolve_train_ml_model_version(_, info, id):
-    # check if the model exists
-    model_version = get_model_version(id)
-    if model_version is None:
-        raise HttpBadRequestError("Model version not found")
-
-    if model_version['status'] == 'DEPLOYED':
-        raise HttpBadRequestError(f"Cannot train a model that is already deployed")
-    # should not be able to train a model version that it's status is training or deploying
-    if model_version['status'] == 'TRAINING' or model_version['status'] == 'DEPLOYING':
-        raise HttpBadRequestError(f"Cannot train a model that is currently {model_version['status']}")
-
-    # TODO: call the api gateway to train the model
-
-    model_version['status'] = 'TRAINED'
-    return model_version
-
 
 @mutations.field("deployMLModelVersion")
 def resolve_deploy_ml_model_version(_, info, id):

@@ -4,6 +4,7 @@ from ariadne import gql
 type_defs = gql("""
 
    scalar DateTime
+   scalar Dict
 
    interface Tag {
     id: ID!
@@ -114,6 +115,13 @@ type_defs = gql("""
         numEpochs: Int
     }
     
+    type User{
+        id: ID!
+        name: String!
+        email: String!
+    }
+        
+    
     type MLModel {
         id: ID!
         name: String!
@@ -121,16 +129,15 @@ type_defs = gql("""
         createdBy: Int!
         createdAt: DateTime
         updatedAt: DateTime
-        useCase: String!
-        usageGuidelines: String!
         signature: MLModelSignature!
         versions: [MLModelVersion]
     }
     
     type MLModelSignature {
         id: ID!
-        inputs: [MLModelInputTag]
-        outputs: MLModelOutputTag
+        datasource: DataSource!
+        inputTags: [TagInterface]
+        outputTag: TagInterface
     }
     
     
@@ -164,13 +171,13 @@ type_defs = gql("""
         name: String!
         endpointArn: String!
         endpointConfig: MLModelDeploymentConfig!
-        createdAt: DateTime!
-        updatedAt: DateTime!
+        createdAt: Int!
+        updatedAt: Int!
     }
 
     union ModelParameters = LSTMModelParameters | VAEModelParameters
 
-    enum ModelVersionStatus {
+    enum MLModelVersionStatus {
         PENDING
         TRAINING
         TRAINED
@@ -183,18 +190,36 @@ type_defs = gql("""
         TIME_SERIES_PREDICTION
     }
     
+    type ModelTypeParameter {
+        name: String!
+        hiddenSize: Int
+        sequenceLength: Int
+        nLayers: [Int]
+        dropout: [Int]
+        learningRate: Float
+        batchSize: Int
+        numEpochs: Int
+    }
+    
+    type ModelType {
+        id: ID!
+        name: String!
+        description: String
+        parameters: ModelTypeParameter
+    }
+    
     type DatasourceMap {
         datasourceId: Int!
-        startTime: DateTime!
-        endTime: DateTime!
+        startTime: Int!
+        endTime: Int!
     }
 
     type MLModelVersion {
         id: ID!
         name: String!
-        parameters: ModelParameters
-        status: ModelVersionStatus
-        type: ModelVersionType
+        parameters: Dict!
+        status: MLModelVersionStatus
+        modelType: ModelType
         version: Int!
         createdAt: DateTime!
         updatedAt: DateTime!
@@ -208,10 +233,10 @@ type_defs = gql("""
         id: ID!
         modelVersion: MLModelVersion!
         datasourceId: Int
-        startTime: DateTime!
+        startTime: Int!
         secondsToRepeat: Int!
         createdAt: DateTime
-        createdBy: Int
+        createdBy: User!
     }
     
     enum TaskStatus {
@@ -227,9 +252,9 @@ type_defs = gql("""
         status: TaskStatus!
         failureReason: String
         errorMessage: String
-        lastRun: DateTime
-        startExecution: DateTime
-        endExecution: DateTime
+        lastRun: Int
+        startExecution: Int
+        endExecution: Int
         executionDuration: Int
         successfulRun: Boolean
         modelVersion: MLModelVersion!
@@ -320,23 +345,21 @@ type_defs = gql("""
     }
         
     input MLModelSignatureInput {
-        inputs: [MLModelInputTagInput]
-        outputs: MLModelOutputTagInput
+        datasourceId: ID!
+        inputTags: [ID!]
+        outputTag: MLModelOutputTagInput
     }
     
     input MLModelCreateInput{
         name: String!
         description: String
-        useCase: String
-        usageGuidelines: String
-        signature: MLModelSignatureInput!
+        signature: MLModelSignatureInput
     }
     
      input MLModelUpdateInput{
         name: String
         description: String
-        useCase: String
-        usageGuidelines: String
+        signature: MLModelSignatureInput
     }
     
     input MLModelVersionDatasourceMappingInput {
@@ -345,23 +368,21 @@ type_defs = gql("""
         endTime: DateTime!
     }
     
-    input ModelParametersInput {
+    input parameterInput {
         name: String!
-        hiddenSize: Int
-        sequenceLength: Int
-        nLayers: [Int]
-        dropout: [Int]
-        learningRate: Float
-        batchSize: Int
-        numEpochs: Int
+        value: String!
+    }
+    
+    input ModelParametersInput {
+        parameters: [parameterInput]
     }
     
     input MLModelVersionInput {
         name: String!
         description: String
-        parameters: ModelParametersInput
-        modelId: ID!
-        type: ModelVersionType
+        parameters: [parameterInput]
+        mlModelId: ID!
+        modelTypeId: ID
         datasourceMapping: MLModelVersionDatasourceMappingInput
     }
     
@@ -369,7 +390,7 @@ type_defs = gql("""
         name: String!
         description: String
         parameters: ModelParametersInput
-        type: ModelVersionType
+        mlModelId: ID!
         datasourceMapping: MLModelVersionDatasourceMappingInput
     }
     
@@ -378,6 +399,12 @@ type_defs = gql("""
         datasourceId: ID!
         startTime: DateTime!
         secondsToRepeat: Int!
+    }
+    
+    input ModelTypeInput {
+        name: String!
+        description: String
+        parameters: ModelParametersInput
     }
     
 
@@ -408,6 +435,11 @@ type_defs = gql("""
         createMLModelScheduler(input: MLModelSchedulerInput!): MLModelScheduler!
         deleteMLModelScheduler(id: ID!): Boolean!
         
+        createModelType(input: ModelTypeInput!): ModelType!
+        updateModelType(id: ID!, input: ModelTypeInput!): ModelType!
+        deleteModelType(id: ID!): Boolean!
+        
+        
     }
 
     type Query {
@@ -422,6 +454,10 @@ type_defs = gql("""
         
         mlmodelversions(model_id: ID!): [MLModelVersion]
         mlmodelversion(id: ID!): MLModelVersion
+        
+        modeltypes: [ModelType]
+        modeltype(id: ID!): ModelType
+        
         
         mlmodelschedulers(modelVersionId: ID!): [MLModelScheduler]
         mlmodelscheduler(id: ID!): MLModelScheduler
