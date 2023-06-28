@@ -1,13 +1,12 @@
-import os
 import sys
 
+import boto3
 from uvicorn import config
 
-from src.maio_ml.deploy.sagemaker import utils, predict, serve
+from maio_ml.deploy.sagemaker import utils, predict, serve
 
 sys.path.append(".")
 from fastapi import FastAPI
-from fastapi import Path
 from fastapi.responses import RedirectResponse
 from http import HTTPStatus
 import json
@@ -80,3 +79,39 @@ async def train(payload: TrainingPayload):
     }
     config.logger.info(json.dumps(response, indent=2))
     return response
+
+
+class LambdaPayload(BaseModel):
+    gateway_name: str
+    token: str
+    start_time: str
+    end_time: str
+    endpoint: str
+    base_url: str = None
+
+
+@app.post("/invoke-lambda")
+def invoke_lambda_function(payload: LambdaPayload):
+
+    # Create the payload for the Lambda function
+    lambda_payload = {
+        'gateway_name': payload.gateway_name,
+        'token': payload.token,
+        'start_time': payload.start_time,
+        'end_time': payload.end_time,
+        'endpoint': payload.endpoint,
+        'base_url': payload.base_url
+    }
+
+    lambda_client = boto3.client('lambda')
+
+    # Invoke the Lambda function
+    response = lambda_client.invoke(
+        FunctionName='test_func_v2',
+        InvocationType='RequestResponse',
+        Payload=str.encode(json.dumps(lambda_payload))
+    )
+
+    # Parse the Lambda response
+    response_payload = response['Payload'].read().decode('utf-8')
+    return response_payload

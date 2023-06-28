@@ -1,19 +1,14 @@
 import sys
 
+from .deploy_env import DeployEnv
+
 sys.path.append(".")
 import argparse
 import json
-import os
-import re
-import tarfile
 from datetime import datetime, timedelta, timezone
 
-import boto3
 import pandas as pd
-import sagemaker
-from deploy_env import DeployEnv
 from maio_python import Client
-from sagemaker.pytorch import PyTorchModel
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -23,7 +18,8 @@ if __name__ == '__main__':
 
     env = DeployEnv()
 
-    maio_client = Client("https://engine.heineken.maio.io", token="7EBlJRDyNuJRftXOENSAttekNN4Azu") # os.getenv("MAIO_TOKEN"))
+    maio_client = Client("https://engine.heineken.maio.io",
+                         token="7EBlJRDyNuJRftXOENSAttekNN4Azu")  # os.getenv("MAIO_TOKEN"))
 
     t0 = datetime(2023, 5, 8, 10, 0, 0, tzinfo=timezone.utc)
 
@@ -31,13 +27,15 @@ if __name__ == '__main__':
     assert gateway_id is not None
 
     # every 15 minutes for 6 hours
-    for dt_ in range(0, 60*24*3, 60):
+    for dt_ in range(0, 60 * 24 * 3, 60):
         t2 = t0 + timedelta(minutes=dt_)
         t1 = t2 - timedelta(minutes=256)
 
         _, df_maio = maio_client.get_tag_entries_for_gateway(gateway_id, t1, t2)
 
-        mapping_columns = {"CoolerTemp": "cooler_temp", "BathTemp": "bath_temp", "CoolerSwitch": "cooler_switch", "RefridgentTemp": "refridgent_temp", "CompressorCurrent": "compressor_current", "timestamps": "timestamp"}
+        mapping_columns = {"CoolerTemp": "cooler_temp", "BathTemp": "bath_temp", "CoolerSwitch": "cooler_switch",
+                           "RefridgentTemp": "refridgent_temp", "CompressorCurrent": "compressor_current",
+                           "timestamps": "timestamp"}
 
         df_maio_small = df_maio[mapping_columns.keys()].rename(columns=mapping_columns)
 
@@ -73,4 +71,5 @@ if __name__ == '__main__':
 
         anom_score = pd.read_json(json.loads(data), orient='split')
 
-        print(f"time: {t2} - anomaly detected: {anom_score.ge(4.5).any()['anom_score']} - {anom_score.ge(4.5).sum()['anom_score']}")
+        print(
+            f"time: {t2} - anomaly detected: {anom_score.ge(4.5).any()['anom_score']} - {anom_score.ge(4.5).sum()['anom_score']}")
