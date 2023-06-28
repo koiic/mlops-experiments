@@ -3,14 +3,11 @@ import zipfile
 
 sys.path.append(".")
 import argparse
-import logging
 import logging.config
 import os
 import re
-import tarfile
 
 import boto3
-import sagemaker
 from deploy_env import DeployEnv
 from sagemaker.pytorch import PyTorchModel
 from sagemaker.pytorch.estimator import PyTorch
@@ -50,6 +47,15 @@ def build_model_data_file():
 
 def update_endpoint_if_exists(env: DeployEnv):
     return env.isProduction() & env.isDeployed()
+
+
+def update_endpoint(env: DeployEnv):
+    # update sage maker endpoint
+    logger.info("Updating endpoint...")
+    env.client().update_endpoint(
+        EndpointName=env.setting("model_name"),
+        EndpointConfigName=env.setting("model_name"),
+    )
 
 
 def delete_endpoint(env: DeployEnv, endpoint: str):
@@ -139,23 +145,88 @@ def train(
     estimator.fit({"training": training_input_path, "test": test_input_path})
 
 
-def deploy_lambda(env: DeployEnv, zip_file_name: str):
-    lambda_client = boto3.client('lambda')
-    # Create a new Lambda function and update it with the latest code
-    # Create a ZIP file of the function code
-    zip_file_name = 'function_code.zip'
-    source_dir = 'maio_ml/deploy/sagemaker/lambda_func.py'
+def create_layer(env: DeployEnv):
+    """
+    create a aws_utils layer with the required libraries
+
+    """
+
+    # Upload the layer ZIP file to AWS Lambda
+    with open('maio_ml/deploy/aws_utils/layer.zip', 'rb') as f:
+        response = env.lambda_client().publish_layer_version(
+            LayerName='maio-layer',
+            Content={
+                'ZipFile': f.read()
+            },
+            CompatibleRuntimes=['python3.8'],  # Replace with your desired runtime(s)
+            Description='Maio layer for aws_utils functions'
+        )
+        print(response['LayerVersionArn'], response)
+
+
+# def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
+#     # Create a new Lambda function and update it with the latest code
+#     # Create a ZIP file of the function code
+#
+#     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+#         zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
+#
+#     with open(zip_file_name, 'rb') as f:
+#         zipped_code = f.read()
+#
+#     response = env.lambda_client().create_function(
+#         FunctionName='test_func_v2',
+#         Runtime='python3.8',
+#         Role=env.setting("aws_role"),
+#         Handler='lambda_func.lambda_handler',
+#         Code={
+#             'ZipFile': zipped_code
+#
+#         },
+#
+#     )
+#
+#     print(response, " RESPONSE")
+#
+
+def update_lambda_function(env: DeployEnv, source_dir, zip_file_name):
     with zipfile.ZipFile(zip_file_name, 'w') as zipf:
-        zipf.write(source_dir)  # Add your source code file(s) to the ZIP
+        zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
 
     with open(zip_file_name, 'rb') as f:
         zipped_code = f.read()
 
-    response = lambda_client.create_function(
-        FunctionName='inference_lambda',
+    response = env.lambda_client().update_function_code(
+        FunctionName='test_func_v2',
+        ZipFile=zipped_code,
+        Publish=True
+
+    )
+
+    print(response, " RESPONSE")
+
+
+def create_lambda_function(env: DeployEnv, source_dir, zip_file_name):
+    # Create a new Lambda function and update it with the latest code
+    # Create a ZIP file of the function code
+
+    with zipfile.ZipFile(zip_file_name, 'w') as zipf:
+        # get all files from the source_dir
+        for root, dirs, files in os.walk(source_dir):
+            print(root, dirs, files)
+            for file in files:
+                zipf.write(os.path.join(root, file), arcname=os.path.basename(file))
+
+        # zipf.write(f"{source_dir}/lambda_func.py", arcname=os.path.basename("lambda_func.py"))
+
+    with open(zip_file_name, 'rb') as f:
+        zipped_code = f.read()
+
+    response = env.lambda_client().create_function(
+        FunctionName='graphql-server',
         Runtime='python3.8',
         Role=env.setting("aws_role"),
-        Handler='lambda_func.lambda_handler',
+        Handler='lambda_func.handler',
         Code={
             'ZipFile': zipped_code
         },
@@ -171,7 +242,7 @@ if __name__ == "__main__":
     # parser.add_argument("--train", action="store_true", help="Use to train the model.")
     parser.add_argument("--train", action="store_true", help="Use to train the model.")
     parser.add_argument("--delete", action="store_true", help="Use to delete the endpoint.")
-    parser.add_argument("--function", action="store_true", help="Use to deploy the lambda function.")
+    parser.add_argument("--function", action="store_true", help="Use to create the lambda function.")
     parser.add_argument("--endpoint", type=str, help="endpoint name.")
 
     env = DeployEnv()
@@ -181,11 +252,11 @@ if __name__ == "__main__":
     print(args)
 
     source_dir = "maio_ml/deploy/sagemaker"
+    zip_file_name = 'lambda_func.zip'
 
     if args.train:
         # deploy()
         hyperparameters = {"learning-rate": 0.001, "epochs": 10}
-        role = "arn:aws:iam::146915812621:role/service-role/SageMaker-DataScientist"
         # source_dir="chequers-rookley/code/src"
         # output_path="file://chequers-rookley/models/"
         output_path = "file://build/"
@@ -203,6 +274,8 @@ if __name__ == "__main__":
     elif args.delete:
         delete_endpoint(env, args.endpoint)
     elif args.function:
-        deploy_lambda(env, "lambda_func.zip")
+        # create_layer(env)
+        # update_lambda_function(env, source_dir, zip_file_name)
+        create_lambda_function(env, "maio_ml/deploy/graphql_server", "graphql_server.zip")
     else:
         deploy(env, source_dir)

@@ -9,6 +9,7 @@ class DeployEnv(object):
     def __init__(self):
         self._client = None
         self._runtime_client = None
+        self._lambda_client = None
         self._set_config_filename()
         self._load_yaml()
 
@@ -44,6 +45,14 @@ class DeployEnv(object):
             self._runtime_client = boto3.client("sagemaker-runtime")
 
         return self._runtime_client
+
+    def lambda_client(self):
+        if self._lambda_client:
+            return self._lambda_client
+        else:
+            self._lambda_client = boto3.client("lambda")
+
+        return self._lambda_client
 
     def client(self):
         if self._client:
