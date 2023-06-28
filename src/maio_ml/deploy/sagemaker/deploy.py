@@ -71,7 +71,7 @@ def deploy(env: DeployEnv, source_dir: str):
     upload_model_data(env)
 
     pytorch_model = PyTorchModel(
-        entry_point="script.py",
+        entry_point="script_with_maio.py",
         source_dir=source_dir,  # "chequers-rookley/code/src/",
         model_data=f"{env.setting('model_data_path')}/model.tar.gz",
         name=env.setting("model_name"),
@@ -100,6 +100,7 @@ def deploy(env: DeployEnv, source_dir: str):
         # update_endpoint = update_endpoint_if_exists(),
         initial_instance_count=1,
     )
+    logger.info(f"Predictor: {predictor}")
     logger.info("\t...DONE.")
 
 

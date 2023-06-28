@@ -1,6 +1,6 @@
 environments:
   default: &default
-    model_name: pytorch-anomaly-classification
+    model_name: pytorch-anomaly-classification-v2
     # aws_role: 'AmazonSageMakerFullAccess'
     aws_role: 'arn:aws:iam::146915812621:role/service-role/SageMaker-DataScientist'
   local:
@@ -10,4 +10,4 @@ environments:
   production:
     <<: *default
     instance_type: ml.t2.medium
-    model_data_path: s3://maio-sagemaker/models
+    model_data_path: s3://maio-sagemaker/
