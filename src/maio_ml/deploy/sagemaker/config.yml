@@ -1,6 +1,6 @@
 environments:
   default: &default
-    model_name: pytorch-anomaly-classification
+    model_name: pytorch-anomaly-classification-v2
     # aws_role: 'AmazonSageMakerFullAccess'
     aws_role: 'arn:aws:iam::146915812621:role/service-role/SageMaker-DataScientist'
   local:

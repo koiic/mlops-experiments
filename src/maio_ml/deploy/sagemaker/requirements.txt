@@ -1,3 +1,4 @@
 multi-model-server
 sagemaker-inference
 salesforce-merlion
+https://aql-anomaly-detection-files.s3.eu-west-2.amazonaws.com/maio_python-0.5.1-py2.py3-none-any.whl
