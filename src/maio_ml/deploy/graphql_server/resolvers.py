@@ -3,6 +3,8 @@ from datetime import datetime
 from ariadne import QueryType, MutationType, ObjectType, UnionType
 from ariadne.exceptions import HttpBadRequestError
 
+from model import User
+
 query = QueryType()
 mutations = MutationType()
 
@@ -12,14 +14,12 @@ model_signatures = []
 model_parameters = []
 schedulers = []
 schedules_task_history = []
+data_sources = []
 
 
 def get_model(model_id):
     for model in models_:
         if model["id"] == int(model_id):
-            model.update(
-                {"signature": next(
-                    signature for signature in model_signatures if signature["model_id"] == int(model_id))})
             model.update(
                 {'versions': [model_version for model_version in model_versions if
                               model_version["ml_model_id"] == model_id]}
@@ -34,30 +34,40 @@ def get_model_version(model_version_id):
 
 
 def get_model_version_count(model_id):
-    return len([model_version for model_version in model_versions if model_version["model_id"] == model_id])
+    return len([model_version for model_version in model_versions if model_version["ml_model_id"] == model_id])
 
 
 # ...and assign our resolver function to its "hello" field.
 @query.field("datasources")
-def resolve_datasources(_, info):
-    data_sources = []
+def resolve_datasources(root, info):
+    db = info.context["db"]
+
+    # db_user = User(name="test calory", fullname="ismail ibrahim")
+    # db.add(db_user)
+    # db.commit()
+    # db.refresh(db_user)
+    # print(db.query(User).first())
+
+
     for i in range(1, 10):
         data_sources.append({
             "id": str(i),
-            "name": f"Data Source {i}"
+            "name": f"Data Source {i}",
+            "tags": [
+                {"id": str(i),
+                 "label": f"Tag {i}",
+                 "unit": "volume"
+                 }
+            ]
         })
+
     return data_sources
 
 
 @query.field("mlmodels")
 def resolve_mlmodels(_, info):
     # use a map and attach the model signatures for each models
-    models = []
-    for model in models_:
-        model.update(
-            {"signature": next(signature for signature in model_signatures if signature["model_id"] == model["id"])})
-        models.append(model)
-    return models
+    return models_
 
 
 @query.field("mlmodel")
@@ -86,25 +96,25 @@ def resolve_mlmodelschedulers(_, info, model_version_id):
     return [scheduler for scheduler in schedulers if scheduler["model_version_id"] == model_version_id]
 
 
-@query.field("modeltypes")
-def resolve_modeltypes(_, info):
+@query.field("modelalgorithms")
+def resolve_modelalgorithms(_, info):
     parameter = dict(learning_rate=1.0, batch_size=32, epochs=100)
     return [
         {
             "id": 1,
             "name": "Tensorflow",
-            "modelParameters": parameter,
+            "parameters": parameter,
         },
         {
             "id": 2,
             "name": "Pytorch",
-            "modelParameters": parameter,
+            "parameters": parameter,
         },
     ]
 
 
-@query.field("modeltype")
-def resolve_modeltype(_, info, id):
+@query.field("modelalgorithm")
+def resolve_modelalgorithm(_, info, id):
     parameters = dict(learning_rate=1.0, batch_size=32, epochs=100)
     return {
         "id": 1,
@@ -118,14 +128,6 @@ def resolve_mlmodelschedulertaskhistory(_, info, model_version_id):
     return [scheduler for scheduler in schedules_task_history if scheduler["model_version_id"] == model_version_id]
 
 
-@mutations.field("createDataSource")
-def resolve_create_data_source(_, info, input):
-    return {
-        "id": "1",
-        "name": input["name"]
-    }
-
-
 def validate_model(data):
     if data["name"].strip() == "":
         raise HttpBadRequestError("Name is required")
@@ -137,20 +139,23 @@ def resolve_create_ml_model(_, info, input):
     model_id = models_[-1]["id"] + 1 if models_ else 1
     now = datetime.now()
     dt_str = now.strftime("%Y-%m-%d %H:%M:%S")
-    signature = input.pop("signature")
     data = dict(**input)
     data["id"] = model_id
-    data["created_by"] = 1
+    data["created_by"] = {"id": 1, "name": "Admin", "email": "admin.example.com"}
     data["created_at"] = dt_str
     data["versions"] = []
-
-    signature["id"] = model_id
-    signature["model_id"] = model_id
-    signature['datasource'] = {'id': 1, 'connector': 'GATEWAY', 'name': 'Gateway'}
-    model_signatures.append(signature)
+    data["output_tag"]["id"] = model_id
+    data['datasource'] = data_sources[0]
     models_.append(data)
-    data['signature'] = signature
     return data
+
+
+tag_interface = UnionType("TagInterface")
+
+
+@tag_interface.type_resolver
+def resolve_tag_interface_type(obj, *_):
+    return "MLModelTag"
 
 
 @mutations.field("createMLModelVersion")
@@ -169,29 +174,14 @@ def resolve_create_ml_model_version(_, info, input):
     data["archived"] = False
     data["created_at"] = dt_str
     data["updated_at"] = dt_str
-    if input["model_type_id"] and input['datasource_mapping']['datasource_id']:
+    if input["model_algorithm_id"] and input['datasource_id']:
         data['status'] = 'TRAINING'
 
     model_versions.append(data)
     model = get_model(input["ml_model_id"])
     data['ml_model'] = model
 
-    # if the modeltype ID is provides  then launch training
-
     return data
-
-
-parameters = UnionType("ModelParameters")
-
-
-@parameters.type_resolver
-def resolve_model_parameters_type(obj, *_):
-    if obj['name'] == 'LSTMODEL':
-        return "LSTMModelParameters"
-    elif obj['name'] == 'VAEMODEL':
-        return "VAEModelParameters"
-    return None
-
 
 @mutations.field("updateMLModelVersion")
 def resolve_update_ml_model_version(_, info, id, input):
@@ -205,7 +195,6 @@ def resolve_update_ml_model_version(_, info, id, input):
         "name": input["name"],
         "description": input["description"],
         "updated_at": dt_str,
-        "parameters": input["parameters"],
     })
     model_version['parameters']['id'] = model_version['id']
     return model_version
@@ -254,7 +243,7 @@ def resolve_delete_ml_model(_, info, id):
         raise HttpBadRequestError("Model not found")
     # delete all versions of the model
     for model_version in model_versions:
-        if model_version['model_id'] == int(id):
+        if model_version['ml_model_id'] == int(id):
             model_versions.remove(model_version)
     models_.remove(model)
 
@@ -274,7 +263,7 @@ def resolve_deploy_ml_model_version(_, info, id):
     if model_version['status'] != 'TRAINED':
         raise HttpBadRequestError(f"Cannot deploy a model version that is not trained")
 
-    # TODO: call the api gateway to deploy the model
+#     # TODO: call the api gateway to deploy the model
     model_version['status'] = 'DEPLOYED'
     return model_version
 

@@ -1,37 +1,65 @@
 from ariadne import gql
 
-
 type_defs = gql("""
 
-   scalar DateTime
-   scalar Dict
-
-   interface Tag {
-    id: ID!
-    label: String!
-    displayName: String!
-    unit: String!
-    tagEntries: [TagEntry]
+    scalar DateTime
+    scalar Dict
+    scalar Any
+    scalar JSON
+    
+    type DataSource {
+        id: ID!
+        name: String!
+        tags: [TagInterface]
+    }
+    
+    interface Tag {
+        id: ID
+        label: String
+        displayName: String
+        unit: String
+        tagEntries: [TagEntry]
     }
     
     type GatewayTag implements Tag {
-        id: ID!
-        label: String!
-        displayName: String!
-        unit: String!
-        gateway: DataSource!
+        id: ID
+        label: String
+        displayName: String
+        unit: String
+        gateway: DataSource
         tagEntries: [TagEntry]
     }
     
      type MLModelTag implements Tag {
-        id: ID!
-        label: String!
-        displayName: String!
-        unit: String!
-        mlModelSchedule: MLModelScheduler
+        id: ID
+        label: String
+        displayName: String
+        unit: String
+        type: String
         tagEntries: [TagEntry]
     }
+    
+    union TagInterface = GatewayTag | MLModelTag
+    
+    type User {
+        id: ID!
+        name: String!
+        email: String!
+    }
 
+    type MLModel {
+        id: ID!
+        name: String!
+        description: String!
+        createdBy: User
+        createdAt: DateTime
+        updatedAt: DateTime
+        datasource: DataSource
+        inputTags: [TagInterface]
+        outputTag: TagInterface
+        versions: [MLModelVersion]
+    }
+    
     type BooleanValue {
         value: Boolean
     }
@@ -49,8 +77,6 @@ type_defs = gql("""
     }
 
     union TagValue = BooleanValue | FloatValue | IntValue | StringValue
-    
-    union TagInterface = GatewayTag | MLModelTag
 
     type TagEntry {
         id: ID!
@@ -59,113 +85,13 @@ type_defs = gql("""
         value: TagValue!
     }
 
-    type DBConnector {
-        id: ID!
-        name: String!
-        host: String!
-        port: Int!
-        user: String!
-        password: String!
-    }
-
-    type MQTTConnector {
-        id: ID!
-        name: String!
-        host: String!
-        port: Int!
-        user: String!
-        password: String!
-        topic: String!
-    }
-
-    type IoTCoreConnector {
-        id: ID!
-        name: String!
-        host: String!
-        port: Int!
-        user: String!
-        password: String!
-        topic: String!
-        privateKey: String!
-        publicKey: String!
-        certficate: String!
-    }
-
-    type LSTMModelParameters {
-        id: ID!
-        name: String!
-        hiddenSize: Int
-        sequenceLength: Int
-        nLayers: [Int]
-        dropout: [Int]
-        learningRate: Float
-        batchSize: Int
-        numEpochs: Int
-    }
-
-    type VAEModelParameters {
-        id: ID!
-        name: String!
-        hiddenSize: Int
-        sequenceLength: Int
-        nLayers: [Int]
-        dropout: [Int]
-        learningRate: Float
-        batchSize: Int
-        numEpochs: Int
-    }
-    
-    type User{
-        id: ID!
-        name: String!
-        email: String!
-    }
-        
-    
-    type MLModel {
-        id: ID!
-        name: String!
-        description: String!
-        createdBy: Int!
-        createdAt: DateTime
-        updatedAt: DateTime
-        signature: MLModelSignature!
-        versions: [MLModelVersion]
-    }
-    
-    type MLModelSignature {
-        id: ID!
-        datasource: DataSource!
-        inputTags: [TagInterface]
-        outputTag: TagInterface
-    }
-    
-    
-    interface MlModelTagInterface {
-        id: ID!
-        label: String!
-        unitType: String!
-    }
-    
-    type MLModelInputTag implements MlModelTagInterface {
-        id: ID!
-        label: String!
-        unitType: String!
-    }
-    
-    type MLModelOutputTag implements MlModelTagInterface {
-        id: ID!
-        label: String!
-        unitType: String!
-    }
-    
     type MLModelDeploymentConfig {
         id: ID!
         name: String!
         modelVersions: [MLModelVersion]
         configArn: String!
         }
-        
+
     type MLModelDeployment {
         id: ID!
         name: String!
@@ -175,8 +101,6 @@ type_defs = gql("""
         updatedAt: Int!
     }
 
-    union ModelParameters = LSTMModelParameters | VAEModelParameters
-
     enum MLModelVersionStatus {
         PENDING
         TRAINING
@@ -184,14 +108,9 @@ type_defs = gql("""
         UNDEPLOYED
         DEPLOYED
     }
-    
-    enum ModelVersionType {
-        ANOMALY_DETECTION
-        TIME_SERIES_PREDICTION
-    }
-    
+
     type ModelTypeParameter {
-        name: String!
+        name: String
         hiddenSize: Int
         sequenceLength: Int
         nLayers: [Int]
@@ -200,14 +119,14 @@ type_defs = gql("""
         batchSize: Int
         numEpochs: Int
     }
-    
-    type ModelType {
+
+    type MlAlgorithm {
         id: ID!
         name: String!
         description: String
-        parameters: ModelTypeParameter
+        parameters: JSON
     }
-    
+
     type DatasourceMap {
         datasourceId: Int!
         startTime: Int!
@@ -217,18 +136,20 @@ type_defs = gql("""
     type MLModelVersion {
         id: ID!
         name: String!
-        parameters: Dict!
         status: MLModelVersionStatus
-        modelType: ModelType
+        algorithm: MlAlgorithm
         version: Int!
         createdAt: DateTime!
         updatedAt: DateTime!
         mlModel: MLModel!
         modelPath: String
-        datasourceMap: DatasourceMap
+        datasource: DataSource
+        startTime: DateTime!
+        endTime: DateTime!
         archived: Boolean!
+        trainingPercentage: Int!
     }
-    
+
     type MLModelScheduler {
         id: ID!
         modelVersion: MLModelVersion!
@@ -238,14 +159,14 @@ type_defs = gql("""
         createdAt: DateTime
         createdBy: User!
     }
-    
+
     enum TaskStatus {
         PENDING
         RUNNING
         FAILED
         SUCCESSFUL
     }
-    
+
     type MLModelSchedulerTaskHistory{
         id: ID!
         counter: Int
@@ -257,216 +178,129 @@ type_defs = gql("""
         endExecution: Int
         executionDuration: Int
         successfulRun: Boolean
-        modelVersion: MLModelVersion!
+        modelScheduler: MLModelScheduler!
         executionResult: MLModelTag
     }
-    
-    type PageInfo {
-        hasNextPage: Boolean!
-        hasPreviousPage: Boolean!
-        startCursor: String!
-        endCursor: String!
-    }
-    
-    type MLModelSchedulerHistoryPagination {
-        pageInfo: PageInfo!
-        data: [MLModelSchedulerTaskHistory]
-    }
 
-    type MLConnector {
-        mlModelSchedule: [MLModelScheduler]
-    }
-
-    union Connector = DBConnector | MQTTConnector | IoTCoreConnector | MLConnector
-
-    type DataSource {
-        id: ID!
-        name: String!
-        connector: Connector!
-        inputTags: [Tag]
-        outputTags: [Tag]
-        metadata: [Tag]
-    }
-
-    union dict_value = BooleanValue | FloatValue | IntValue | StringValue
-
-    # type JSONMessage {
-    #     [
-    #         key: String
-    #         value: String
-    #     ]
-    # }
-
-    input MQTTConnectorInput {
-        name: String!
-        host: String!
-        port: Int!
-        user: String!
-        password: String!
-        topic: String!
-    }
-
-    input IoTCoreConnectorInput {
-        name: String!
-        host: String!
-        port: Int!
-        user: String!
-        password: String!
-        topic: String!
-        privateKey: String!
-        publicKey: String!
-        certficate: String!
-    }
-
-    input DataSourceInput {
-        name: String!
-        # connector: Connector!
-    }
-
-    input TagInput {
-        name: String!
-        datasource: DataSourceInput!
-    }
-
-    input TagEntryInput {
-        tag: TagInput!
-        timestamp: Int!
-        # value: TagValue!
-    }
-    
-    input MLModelInputTagInput {
-        label: String!
-        unitType: String!
-    }
-    
     input MLModelOutputTagInput {
         label: String!
-        unitType: String!
+        displayName: String!
+        unit: String!
+        type: String!
     }
-        
-    input MLModelSignatureInput {
+
+    input MLModelCreateInput{
+        name: String!
+        description: String
         datasourceId: ID!
         inputTags: [ID!]
         outputTag: MLModelOutputTagInput
     }
-    
-    input MLModelCreateInput{
-        name: String!
-        description: String
-        signature: MLModelSignatureInput
-    }
-    
+
      input MLModelUpdateInput{
         name: String
         description: String
-        signature: MLModelSignatureInput
+        datasourceId: ID
+        inputTags: [ID]
+        outputTag: MLModelOutputTagInput
     }
-    
+
     input MLModelVersionDatasourceMappingInput {
         datasourceId: ID!
         startTime: DateTime!
         endTime: DateTime!
     }
     
-    input parameterInput {
-        name: String!
-        value: String!
+    input algorithmParameterInput {
+        id: ID!
+        parameters: JSON!
     }
-    
-    input ModelParametersInput {
-        parameters: [parameterInput]
-    }
-    
+
     input MLModelVersionInput {
         name: String!
-        description: String
-        parameters: [parameterInput]
         mlModelId: ID!
-        modelTypeId: ID
-        datasourceMapping: MLModelVersionDatasourceMappingInput
+        description: String
+        algorithm: algorithmParameterInput
+        datasourceId: ID
+        startTime: DateTime
+        endTime: DateTime
+        trainingPercentage: Int
+        parameters: JSON
     }
-    
+
     input MLModelVersionUpdateInput {
-        name: String!
+        name: String
+        trainingPercentage: Int
         description: String
-        parameters: ModelParametersInput
-        mlModelId: ID!
-        datasourceMapping: MLModelVersionDatasourceMappingInput
+        mlModelId: ID
+        datasourceId: ID
+        startTime: DateTime
+        endTime: DateTime
+        algorithm: algorithmParameterInput
     }
-    
+
     input MLModelSchedulerInput {
         modelVersionId: ID!
         datasourceId: ID!
         startTime: DateTime!
         secondsToRepeat: Int!
     }
-    
-    input ModelTypeInput {
+
+   input parameterInput {
         name: String!
-        description: String
-        parameters: ModelParametersInput
+        type: String!
+        defaultValue: Any
     }
     
+    input MlAlgorithmInput {
+        name: String!
+        description: String
+        parameters: [parameterInput]
+    }
 
     type Mutation {
-        createMQTTConnector(input: MQTTConnectorInput!): MQTTConnector!
-        createIoTCoreConnector(input: IoTCoreConnectorInput): IoTCoreConnector!
-        createDataSource(input: DataSourceInput!): DataSource!
-        createTag(input: TagInput!): Tag!
-        createTagEntry(input: TagEntryInput!): TagEntry!
-
-        deleteMQTTConnector(id: ID!): Boolean!
-        deleteIoTCoreConnector(id: ID!): Boolean!
-        deleteDataSource(id: ID!): Boolean!
-        deleteTag(id: ID!): Boolean!
-        
+    
+        createDatasource(name: String!): DataSource!
         createMLModel(input: MLModelCreateInput!): MLModel!
         updateMLModel(id: ID!, input: MLModelUpdateInput!): MLModel!
         deleteMLModel(id: ID!): Boolean!
-        
+
         createMLModelVersion(input: MLModelVersionInput!): MLModelVersion!
         updateMLModelVersion(id: ID!, input: MLModelVersionUpdateInput!): MLModelVersion!
         deleteMLModelVersion(id: ID!): Boolean!
-        
+
         deployMLModelVersion(id: ID!): MLModelVersion!
         undeployMLModelVersion(id: ID!): MLModelVersion!
-        trainMLModelVersion(id: ID!): MLModelVersion!
-        
+
         createMLModelScheduler(input: MLModelSchedulerInput!): MLModelScheduler!
         deleteMLModelScheduler(id: ID!): Boolean!
-        
-        createModelType(input: ModelTypeInput!): ModelType!
-        updateModelType(id: ID!, input: ModelTypeInput!): ModelType!
-        deleteModelType(id: ID!): Boolean!
-        
-        
+
+        createMlAlgorithm(input: MlAlgorithmInput!): MlAlgorithm!
+        updateMlAlgorithm(id: ID!, input: MlAlgorithmInput!): MlAlgorithm!
+        deleteMlAlgorithm(id: ID!): Boolean!
+
     }
 
     type Query {
         datasources: [DataSource]
-        connector(id: ID!): Connector
         datasource(id: ID!): DataSource
         tag(id: ID!): Tag
         tagentry(id: ID!, start_time:Int!, end_time:Int): [TagEntry]
-    
+
         mlmodels: [MLModel]
         mlmodel(id: ID!): MLModel
-        
+
         mlmodelversions(model_id: ID!): [MLModelVersion]
         mlmodelversion(id: ID!): MLModelVersion
-        
-        modeltypes: [ModelType]
-        modeltype(id: ID!): ModelType
-        
-        
+
+        mlalgorithms: [MlAlgorithm]
+        mlalgorithm(id: ID!): MlAlgorithm
+
+
         mlmodelschedulers(modelVersionId: ID!): [MLModelScheduler]
         mlmodelscheduler(id: ID!): MLModelScheduler
-        
-        mlmodelschedulertaskhistorypaginate(modelVersionId: ID!): MLModelSchedulerHistoryPagination
-        mlmodelschedulertaskhistory(modelVersionId: ID!): [MLModelSchedulerTaskHistory]
-        
 
-        # get_last_message_from_connector(connector: Connector!): JSONMessage
+        mlmodelschedulertaskhistory(modelSchedulerId: ID!): [MLModelSchedulerTaskHistory]
+
     }
 """)
-
