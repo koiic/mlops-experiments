@@ -1,6 +1,6 @@
 import enum
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, DateTime, UniqueConstraint, func
 from sqlalchemy.dialects import postgresql
@@ -10,7 +10,7 @@ from sqlalchemy.orm import relationship, Mapped, mapped_column, Session
 from database import Base
 
 
-class Model(object):
+class ModelFieldHelper(object):
 
     def save(self, session: Session, **kwargs):
         try:
@@ -22,7 +22,7 @@ class Model(object):
             raise e
 
 
-class User(Base, Model):
+class User(Base, ModelFieldHelper):
     __tablename__ = "user_account"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -33,7 +33,7 @@ class User(Base, Model):
         return f"User(id={self.id!r}, name={self.name!r}, fullname={self.fullname!r})"
 
 
-class Tag(Model):
+class Tag(ModelFieldHelper):
     label = mapped_column(String, index=True)
     display_name = mapped_column(String)
     unit = mapped_column(String)
@@ -68,7 +68,7 @@ class GatewayTag(Base, Tag):
         return f"{self.label}"
 
 
-class Datasource(Base, Model):
+class Datasource(Base, ModelFieldHelper):
     __tablename__ = "datasource"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -78,7 +78,7 @@ class Datasource(Base, Model):
         return f"Datasource(id={self.id!r}, name={self.name!r})"
 
 
-class MlModel(Base, Model):
+class MlModel(Base, ModelFieldHelper):
     __tablename__ = "ml_model"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
@@ -119,11 +119,12 @@ class StatusEnum(enum.Enum):
     pending = "PENDING"
     training = "TRAINING"
     deployed = "DEPLOYED"
+    deploying = "DEPLOYING"
     undeployed = "UNDEPLOYED"
     trained = "TRAINED"
 
 
-class MlModelVersion(Base, Model):
+class MlModelVersion(Base, ModelFieldHelper):
     __tablename__ = "ml_model_version"
 
     id: Mapped[Optional[int]] = mapped_column(Integer, primary_key=True, index=True)
@@ -138,7 +139,10 @@ class MlModelVersion(Base, Model):
     training_percentage: Mapped[Optional[float]] = mapped_column(Integer, nullable=True)
     status: Mapped[StatusEnum] = mapped_column(String, default=StatusEnum.pending.value)
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
-    algorithm: Mapped[Optional["MlAlgorithm"]] = relationship("MlAlgorithm")
+    algorithm_id: Mapped[Optional[int]] = mapped_column(ForeignKey("ml_algorithm.id"))
+    algorithm: Mapped[Optional["MlAlgorithm"]] = relationship(back_populates="ml_model_version")
+    model_path: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    deployment: Mapped[Optional["Deployment"]] = relationship("Deployment")
 
     class Meta:
         pass
@@ -150,26 +154,86 @@ class MlModelVersion(Base, Model):
 
     def save(self, db: Session, **kwargs):
         # get the related ml_model
-        ml_model = db.get(MlModel, self.ml_model_id)
         if not self.version:
+            ml_model = db.get(MlModel, self.ml_model_id)
             self.version = ml_model.max_version(db) + 1
         super().save(db, **kwargs)
 
+    @property
+    def summary(self) -> str:
+        """
+        The summary of the state of an ML model, computed based on
+        the status of the underlying tasks.
+        Precedence proceeds in order of: archival, verification,
+        container building, deployment.
+        """
 
-class MlAlgorithm(Base, Model):
+        if self.archived:
+            return "Archived"
+        elif self.deployed:
+            return "Deployed"
+        elif self.training:
+            return "Training"
+        elif self.deploying:
+            return "Deploying"
+        elif self.trained:
+            return "Trained"
+        elif self.idle:
+            return "Idle"
+        else:
+            return "Live"
+
+    @property
+    def idle(self):
+        """
+        Indicates that the ML model is currently idle, i.e. it's not
+        undergoing training, building or is deployed.
+        """
+        return self.status == StatusEnum.pending.value
+
+    @property
+    def trained(self):
+        return self.status == StatusEnum.trained.value
+
+    @property
+    def training(self):
+        return self.status == StatusEnum.training.value
+
+    @property
+    def deployed(self):
+        return self.status == StatusEnum.deployed.value
+
+    @property
+    def deploying(self):
+        return self.status == StatusEnum.deploying.value
+
+
+class MlModelDeployment(Base, ModelFieldHelper):
+    __tablename__ = "ml_model_deployment"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    ml_model_version_id: Mapped[int] = mapped_column(Integer, ForeignKey("ml_model_version.id"))
+    endpoint: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    deployment_config: Mapped[Dict] = mapped_column(postgresql.JSONB(astext_type=String))
+
+    def __str__(self):
+        return f"{self.ml_model_version}:{self.deployment}"
+
+
+class MlAlgorithm(Base, ModelFieldHelper):
     __tablename__ = "ml_algorithm"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, index=True)
     description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # settings are stored as a postgres jsonblob dict
     parameters: Mapped[List] = mapped_column(postgresql.JSONB(astext_type=String))
-    ml_model_version: Mapped[int] = mapped_column(ForeignKey("ml_model_version.id"), nullable=True)
+    ml_model_version: Mapped[List["MlModelVersion"]] = relationship(back_populates="algorithm")
 
     def __str__(self):
         return f"{self.name}"
 
 
-class MlModelScheduler(Base, Model):
+class MlModelScheduler(Base, ModelFieldHelper):
     __tablename__ = "ml_model_scheduler"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     ml_model_version_id: Mapped[int] = mapped_column(ForeignKey("ml_model_version.id"))
@@ -192,7 +256,7 @@ class TaskStatusEnum(enum.Enum):
     successful = "SUCCESSFUL"
 
 
-class MlModelSchedulerHistory(Base, Model):
+class MlModelSchedulerHistory(Base, ModelFieldHelper):
     __tablename__ = "ml_model_scheduler_history"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     ml_model_scheduler_id: Mapped[int] = mapped_column(ForeignKey("ml_model_scheduler.id"))

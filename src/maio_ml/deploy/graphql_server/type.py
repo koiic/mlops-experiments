@@ -109,16 +109,16 @@ type_defs = gql("""
         DEPLOYED
     }
 
-    type ModelTypeParameter {
-        name: String
-        hiddenSize: Int
-        sequenceLength: Int
-        nLayers: [Int]
-        dropout: [Int]
-        learningRate: Float
-        batchSize: Int
-        numEpochs: Int
-    }
+    # type ModelTypeParameter {
+    #     name: String
+    #     hiddenSize: Int
+    #     sequenceLength: Int
+    #     nLayers: [Int]
+    #     dropout: [Int]
+    #     learningRate: Float
+    #     batchSize: Int
+    #     numEpochs: Int
+    # }
 
     type MlAlgorithm {
         id: ID!

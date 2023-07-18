@@ -68,7 +68,7 @@ def resolve_mlmodelschedulers(_, info, model_version_id):
 @query.field("mlalgorithms")
 def resolve_mlalgorithms(_, info):
     db = info.context["db"]
-    query = db.scalars(select(MlAlgorithm).filter_by(ml_model_version=None))
+    query = db.scalars(select(MlAlgorithm))
     return query
 
 
